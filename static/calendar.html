@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maddox Scheduler</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg-sidebar: #f7f6f3;
+      --bg-hover: #f1f0ee;
+      --bg-today: #f7f6f3;
+      --text: #37352f;
+      --text-muted: #787774;
+      --text-light: #9b9a97;
+      --border: #e3e2df;
+      --border-strong: #d3d1cb;
+      --blue: #2e75cc;
+      --blue-light: #e8f0fb;
+      --red: #e03e3e;
+      --red-bg: #fff0f0;
+      --green: #0f7b6c;
+      --radius: 4px;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #bbb9b4; }
+
+    /* ── Task card ── */
+    .task-card {
+      position: absolute;
+      left: 3px;
+      right: 3px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      overflow: hidden;
+      background: #ffffff;
+      border: 1px solid var(--border);
+      transition: background 0.1s;
+      z-index: 10;
+    }
+    .task-card:hover {
+      background: var(--bg-hover);
+      z-index: 20;
+    }
+    .task-card.dragging {
+      opacity: 0.45;
+    }
+
+    /* ── Drop target ── */
+    .drop-target-active {
+      background: var(--blue-light) !important;
+    }
+
+    /* ── Time slots ── */
+    .time-slot {
+      position: relative;
+      border-top: 1px solid var(--border);
+      min-height: 30px;
+      transition: background 0.08s;
+    }
+    .time-slot.half-hour {
+      border-top-color: transparent;
+      border-top-style: dashed;
+    }
+
+    /* ── Calendar column ── */
+    .calendar-col {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* ── Current time line ── */
+    .current-time-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: var(--red);
+      z-index: 30;
+      pointer-events: none;
+    }
+    .current-time-line::before {
+      content: '';
+      position: absolute;
+      left: -3px;
+      top: -3px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--red);
+    }
+
+    /* ── Sidebar task row ── */
+    .sidebar-task {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 5px 8px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .sidebar-task:hover { background: var(--bg-hover); }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 15, 15, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-box {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      width: 480px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+    }
+
+    /* ── Form elements ── */
+    input, select, textarea {
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid transparent;
+      border-radius: 0;
+      color: var(--text);
+      padding: 4px 0;
+      width: 100%;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-bottom-color: var(--blue);
+    }
+    input::placeholder, textarea::placeholder { color: var(--text-light); }
+    select { background: #ffffff; cursor: pointer; }
+    select option { background: #ffffff; color: var(--text); }
+
+    /* Wrapper gives the subtle box feel */
+    .field-wrap {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 4px 10px;
+      background: #ffffff;
+      transition: border-color 0.15s;
+    }
+    .field-wrap:focus-within {
+      border-color: var(--blue);
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      padding: 5px 12px;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.1s;
+      line-height: 1.5;
+    }
+    .btn-primary {
+      background: var(--blue);
+      color: #ffffff;
+      border-color: var(--blue);
+    }
+    .btn-primary:hover { background: #2563b0; }
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+      border-color: var(--border);
+    }
+    .btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
+    .btn-success {
+      background: transparent;
+      color: var(--green);
+      border-color: var(--border);
+    }
+    .btn-success:hover { background: #f0faf8; }
+    .btn-warning {
+      background: transparent;
+      color: #d97706;
+      border-color: var(--border);
+    }
+    .btn-warning:hover { background: #fffbeb; }
+    .btn-danger {
+      background: transparent;
+      color: var(--red);
+      border-color: var(--border);
+    }
+    .btn-danger:hover { background: var(--red-bg); }
+
+    /* ── Priority badge ── */
+    .priority-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 1;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: var(--bg-hover);
+      color: var(--text-muted);
+      letter-spacing: 0.02em;
+    }
+
+    /* ── Status dot ── */
+    .status-dot {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .status-dot.todo    { background: #9b9a97; }
+    .status-dot.in_progress { background: var(--blue); }
+    .status-dot.done    { background: var(--green); }
+
+    /* ── Pulse for loading ── */
+    .pulse { animation: pulse 1.8s ease-in-out infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ── Priority selector in modal ── */
+    .priority-btn {
+      padding: 3px 8px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: transparent;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.1s, border-color 0.1s, color 0.1s;
+    }
+    .priority-btn.active {
+      background: var(--blue-light);
+      border-color: var(--blue);
+      color: var(--blue);
+    }
+    .priority-btn:hover:not(.active) {
+      background: var(--bg-hover);
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const API_BASE = window.API_BASE || '';
+
+// ─── API helpers ───────────────────────────────────────────────────
+const api = {
+  get: async (path) => {
+    const res = await fetch(`${API_BASE}${path}`);
+    if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
+    return res.json();
+  },
+  post: async (path, body) => {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) throw new Error(`POST ${path} → ${res.status}`);
+    return res.json();
+  },
+  patch: async (path, body) => {
+    const res = await fetch(`${API_BASE}${path}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`PATCH ${path} → ${res.status}`);
+    return res.json();
+  },
+  del: async (path) => {
+    const res = await fetch(`${API_BASE}${path}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`DELETE ${path} → ${res.status}`);
+    return res.ok;
+  },
+};
+
+// ─── Constants ─────────────────────────────────────────────────────
+const HOUR_START = 8;
+const HOUR_END = 22;
+const SLOT_HEIGHT = 30;
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function getWeekDates(offset = 0) {
+  const now = new Date();
+  const day = now.getDay();
+  const mon = new Date(now);
+  mon.setDate(now.getDate() - (day === 0 ? 6 : day - 1) + offset * 7);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    return d;
+  });
+}
+
+function fmtDate(d) { return d.toISOString().slice(0, 10); }
+
+function fmtTime(d) {
+  const h = d.getHours().toString().padStart(2, '0');
+  const m = d.getMinutes().toString().padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+function parseScheduledAt(s) {
+  if (!s) return null;
+  return new Date(s);
+}
+
+function minutesToHeight(mins) {
+  return Math.max(SLOT_HEIGHT, (mins / 30) * SLOT_HEIGHT);
+}
+
+function hoursAgo(dateStr) {
+  if (!dateStr) return 0;
+  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 3600000);
+}
+
+// ─── Status dot component ───────────────────────────────────────────
+function StatusDot({ status }) {
+  return <span className={`status-dot ${status || 'todo'}`} />;
+}
+
+// ─── Priority badge component ───────────────────────────────────────
+function PriorityBadge({ value }) {
+  if (!value) return null;
+  return <span className="priority-badge">P{value}</span>;
+}
+
+// ─── Modal ──────────────────────────────────────────────────────────
+function Modal({ task, projects, onClose, onSave, onStart, onDone, onDelete }) {
+  const isNew = !task.id;
+  const [form, setForm] = useState({
+    title: task.title || '',
+    project_name: task.project_name || (projects[0]?.name || ''),
+    scheduled_at: task.scheduled_at ? new Date(task.scheduled_at).toISOString().slice(0, 16) : '',
+    estimated_minutes: task.estimated_minutes || 60,
+    priority: task.priority || 3,
+    status: task.status || 'todo',
+    notes: task.notes || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleSave = async () => {
+    if (!form.title.trim()) { setError('Title is required'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const payload = {
+        ...form,
+        estimated_minutes: parseInt(form.estimated_minutes) || null,
+        priority: parseInt(form.priority) || 3,
+        scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : null,
+      };
+      await onSave(payload);
+      onClose();
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+    }
+  };
+
+  const handleAction = async (action) => {
+    setSaving(true);
+    try {
+      await action();
+      onClose();
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+    }
+  };
+
+  const projectColor = projects.find(p => p.name === form.project_name)?.color || '#2e75cc';
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-box">
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: projectColor, flexShrink: 0 }} />
+            <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>
+              {isNew ? 'New task' : 'Edit task'}
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 18, lineHeight: 1, padding: '2px 6px', borderRadius: 'var(--radius)' }}
+            onMouseOver={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+            onMouseOut={e => e.currentTarget.style.background = 'none'}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {error && (
+            <div style={{ background: 'var(--red-bg)', border: '1px solid #fca5a5', color: 'var(--red)', fontSize: 13, borderRadius: 'var(--radius)', padding: '8px 12px' }}>
+              {error}
+            </div>
+          )}
+
+          {/* Title */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Title</div>
+            <div className="field-wrap">
+              <input
+                value={form.title}
+                onChange={e => set('title', e.target.value)}
+                placeholder="Task title..."
+                autoFocus
+                style={{ fontSize: 15, fontWeight: 500 }}
+              />
+            </div>
+          </div>
+
+          {/* Project + Status */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Project</div>
+              <div className="field-wrap">
+                <select value={form.project_name} onChange={e => set('project_name', e.target.value)}>
+                  {projects.map(p => (
+                    <option key={p.name} value={p.name}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Status</div>
+              <div className="field-wrap">
+                <select value={form.status} onChange={e => set('status', e.target.value)}>
+                  <option value="todo">Todo</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="done">Done</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Date + Duration */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Date & Time</div>
+              <div className="field-wrap">
+                <input
+                  type="datetime-local"
+                  value={form.scheduled_at}
+                  onChange={e => set('scheduled_at', e.target.value)}
+                />
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Duration (min)</div>
+              <div className="field-wrap">
+                <input
+                  type="number"
+                  min="15"
+                  step="15"
+                  value={form.estimated_minutes}
+                  onChange={e => set('estimated_minutes', e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Priority */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Priority
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[1,2,3,4,5].map(n => (
+                <button
+                  key={n}
+                  className={`priority-btn ${n === form.priority ? 'active' : ''}`}
+                  onClick={() => set('priority', n)}
+                >
+                  P{n}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text-muted)', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notes</div>
+            <div className="field-wrap">
+              <textarea
+                rows={3}
+                value={form.notes}
+                onChange={e => set('notes', e.target.value)}
+                placeholder="Additional context..."
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px', borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {!isNew && (
+              <>
+                {form.status !== 'in_progress' && form.status !== 'done' && (
+                  <button className="btn btn-warning" onClick={() => handleAction(onStart)} disabled={saving}>Start</button>
+                )}
+                {form.status !== 'done' && (
+                  <button className="btn btn-success" onClick={() => handleAction(onDone)} disabled={saving}>Done</button>
+                )}
+                <button className="btn btn-danger" onClick={() => handleAction(onDelete)} disabled={saving}>Delete</button>
+              </>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
+            <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving...' : isNew ? 'Create' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Task Card ───────────────────────────────────────────────────────
+function TaskCard({ task, projectColor, topPx, heightPx, onClick, onDragStart }) {
+  const isDone = task.status === 'done';
+
+  return (
+    <div
+      className="task-card select-none"
+      style={{
+        top: topPx,
+        height: heightPx,
+        opacity: isDone ? 0.55 : 1,
+        borderLeft: `3px solid ${projectColor}`,
+      }}
+      onClick={() => onClick(task)}
+      draggable
+      onDragStart={e => onDragStart(e, task)}
+    >
+      <div style={{ paddingLeft: 8, paddingRight: 6, paddingTop: 4, paddingBottom: 4, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 4 }}>
+          <span style={{
+            fontSize: 12,
+            fontWeight: 500,
+            lineHeight: 1.3,
+            color: 'var(--text)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1,
+            textDecoration: isDone ? 'line-through' : 'none',
+          }}>
+            {task.title}
+          </span>
+          <StatusDot status={task.status} />
+        </div>
+        {heightPx > 44 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 3 }}>
+            {task.project_name && (
+              <span style={{ fontSize: 10, color: 'var(--text-light)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                {task.project_name}
+              </span>
+            )}
+            {task.priority > 0 && <PriorityBadge value={task.priority} />}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Calendar Column ─────────────────────────────────────────────────
+function CalendarColumn({ date, tasks, projects, onTaskClick, onDropSlot, onDragTaskStart }) {
+  const totalSlots = (HOUR_END - HOUR_START) * 2;
+
+  const now = new Date();
+  const isToday = fmtDate(now) === fmtDate(date);
+  const nowSlotFraction = isToday
+    ? ((now.getHours() - HOUR_START) * 60 + now.getMinutes()) / 30
+    : null;
+  const nowPx = nowSlotFraction !== null && nowSlotFraction >= 0 && nowSlotFraction <= totalSlots
+    ? nowSlotFraction * SLOT_HEIGHT
+    : null;
+
+  const getProjectColor = (name) => {
+    return projects.find(p => p.name === name)?.color || '#2e75cc';
+  };
+
+  const handleDragOver = (e) => { e.preventDefault(); e.currentTarget.classList.add('drop-target-active'); };
+  const handleDragLeave = (e) => { e.currentTarget.classList.remove('drop-target-active'); };
+  const handleDrop = (e, slotIdx) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('drop-target-active');
+    const hour = HOUR_START + Math.floor(slotIdx / 2);
+    const minute = (slotIdx % 2) * 30;
+    const newDate = new Date(date);
+    newDate.setHours(hour, minute, 0, 0);
+    onDropSlot(newDate);
+  };
+
+  return (
+    <div className="calendar-col">
+      {Array.from({ length: totalSlots }, (_, i) => (
+        <div
+          key={i}
+          className={`time-slot${i % 2 === 1 ? ' half-hour' : ''}`}
+          style={{ height: SLOT_HEIGHT }}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={e => handleDrop(e, i)}
+        />
+      ))}
+
+      {nowPx !== null && (
+        <div className="current-time-line" style={{ top: nowPx }} />
+      )}
+
+      {tasks.map(task => {
+        const dt = parseScheduledAt(task.scheduled_at);
+        if (!dt) return null;
+        const slotFraction = ((dt.getHours() - HOUR_START) * 60 + dt.getMinutes()) / 30;
+        const topPx = slotFraction * SLOT_HEIGHT;
+        const heightPx = task.estimated_minutes ? minutesToHeight(task.estimated_minutes) : SLOT_HEIGHT;
+        const color = getProjectColor(task.project_name);
+
+        return (
+          <TaskCard
+            key={task.id}
+            task={task}
+            projectColor={color}
+            topPx={topPx}
+            heightPx={heightPx}
+            onClick={onTaskClick}
+            onDragStart={(e, t) => onDragTaskStart(t)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Sidebar Task Item ────────────────────────────────────────────────
+function SidebarTask({ task, projects, onClick, zombie }) {
+  const color = projects.find(p => p.name === task.project_name)?.color || '#2e75cc';
+  return (
+    <div
+      className="sidebar-task"
+      style={zombie ? { background: 'var(--red-bg)', marginBottom: 2 } : { marginBottom: 1 }}
+      onClick={() => onClick(task)}
+    >
+      <div style={{ width: 6, height: 6, borderRadius: '50%', background: zombie ? 'var(--red)' : color, flexShrink: 0, marginTop: 5 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <p style={{ fontSize: 12, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>{task.title}</p>
+        <p style={{ fontSize: 11, color: zombie ? 'var(--red)' : 'var(--text-light)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {zombie ? `${hoursAgo(task.updated_at)}h stale` : task.project_name}
+        </p>
+      </div>
+      <StatusDot status={task.status} />
+    </div>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────
+function App() {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [weekDates, setWeekDates] = useState(() => getWeekDates(0));
+  const [projects, setProjects] = useState([]);
+  const [weekTasks, setWeekTasks] = useState([]);
+  const [allTasks, setAllTasks] = useState([]);
+  const [zombies, setZombies] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [modal, setModal] = useState(null);
+  const [draggedTask, setDraggedTask] = useState(null);
+  const [lastRefresh, setLastRefresh] = useState(null);
+  const refreshTimer = useRef(null);
+
+  useEffect(() => { setWeekDates(getWeekDates(weekOffset)); }, [weekOffset]);
+
+  const fetchAll = useCallback(async () => {
+    try {
+      const [proj, week, tasks, zombs] = await Promise.all([
+        api.get('/api/projects'),
+        api.get('/api/calendar/week'),
+        api.get('/api/tasks'),
+        api.get('/api/calendar/zombies'),
+      ]);
+      setProjects(proj);
+      setWeekTasks(week);
+      setAllTasks(tasks);
+      setZombies(zombs);
+      setError(null);
+      setLastRefresh(new Date());
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAll();
+    refreshTimer.current = setInterval(fetchAll, 60000);
+    return () => clearInterval(refreshTimer.current);
+  }, [fetchAll]);
+
+  const tasksForDay = (date) => {
+    const dateStr = fmtDate(date);
+    return weekTasks.filter(t => {
+      if (!t.scheduled_at) return false;
+      return fmtDate(new Date(t.scheduled_at)) === dateStr;
+    });
+  };
+
+  const weekDateStrs = new Set(weekDates.map(fmtDate));
+  const unscheduledOpen = allTasks.filter(t => {
+    if (t.status === 'done') return false;
+    if (!t.scheduled_at) return true;
+    const d = fmtDate(new Date(t.scheduled_at));
+    return !weekDateStrs.has(d);
+  });
+
+  const handleDropSlot = async (task, newDate) => {
+    try {
+      await api.patch(`/api/tasks/${task.id}`, { scheduled_at: newDate.toISOString() });
+      fetchAll();
+    } catch (e) { setError(e.message); }
+  };
+
+  const openNewTask = () => setModal({ task: { title: '', status: 'todo', priority: 3, estimated_minutes: 60 } });
+  const openEditTask = (task) => setModal({ task });
+
+  const handleSave = async (form) => {
+    if (modal.task.id) {
+      await api.patch(`/api/tasks/${modal.task.id}`, form);
+    } else {
+      await api.post('/api/tasks', form);
+    }
+    fetchAll();
+  };
+  const handleStart = async () => { await api.post(`/api/tasks/${modal.task.id}/start`); fetchAll(); };
+  const handleDone  = async () => { await api.post(`/api/tasks/${modal.task.id}/done`);  fetchAll(); };
+  const handleDelete= async () => { await api.del(`/api/tasks/${modal.task.id}`);        fetchAll(); };
+
+  const totalSlots = (HOUR_END - HOUR_START) * 2;
+
+  const weekLabel = (() => {
+    const start = weekDates[0];
+    const end   = weekDates[6];
+    const opts  = { month: 'short', day: 'numeric' };
+    return `${start.toLocaleDateString('en-US', opts)} – ${end.toLocaleDateString('en-US', opts)}, ${end.getFullYear()}`;
+  })();
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
+
+      {/* ── Header ── */}
+      <header style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 20px', height: 48, borderBottom: '1px solid var(--border)',
+        background: 'var(--bg)', flexShrink: 0,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 24, height: 24, borderRadius: 4, background: '#2e75cc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>M</span>
+          </div>
+          <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>Maddox Scheduler</span>
+          {lastRefresh && (
+            <span style={{ fontSize: 11, color: 'var(--text-light)' }}>
+              Updated {fmtTime(lastRefresh)}
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {error && (
+            <span style={{ fontSize: 12, color: 'var(--red)', background: 'var(--red-bg)', padding: '2px 10px', borderRadius: 'var(--radius)', border: '1px solid #fca5a5' }}>
+              {error}
+            </span>
+          )}
+          <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>{weekLabel}</span>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => setWeekOffset(w => w - 1)}>← Prev</button>
+            <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => setWeekOffset(0)}>Today</button>
+            <button className="btn btn-ghost" style={{ fontSize: 12, padding: '4px 10px' }} onClick={() => setWeekOffset(w => w + 1)}>Next →</button>
+          </div>
+        </div>
+      </header>
+
+      {loading ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span className="pulse" style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading...</span>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
+          {/* ── Sidebar ── */}
+          <aside style={{
+            width: 220, flexShrink: 0,
+            background: 'var(--bg-sidebar)',
+            borderRight: '1px solid var(--border)',
+            display: 'flex', flexDirection: 'column', overflow: 'hidden',
+          }}>
+            <div style={{ padding: '12px 12px 10px', borderBottom: '1px solid var(--border)' }}>
+              <button className="btn btn-primary" style={{ width: '100%', fontSize: 13 }} onClick={openNewTask}>
+                + New task
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 8px 0' }}>
+              {/* Zombies */}
+              {zombies.length > 0 && (
+                <div style={{ marginBottom: 12 }}>
+                  <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--red)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 4px', marginBottom: 4 }}>
+                    Zombies ({zombies.length})
+                  </p>
+                  {zombies.map(task => (
+                    <SidebarTask key={task.id} task={task} projects={projects} onClick={openEditTask} zombie />
+                  ))}
+                </div>
+              )}
+
+              {/* Unscheduled open */}
+              <div style={{ marginBottom: 8 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', padding: '0 4px', marginBottom: 4 }}>
+                  Open ({unscheduledOpen.length})
+                </p>
+                {unscheduledOpen.length === 0 && (
+                  <p style={{ fontSize: 12, color: 'var(--text-light)', padding: '0 4px' }}>All clear</p>
+                )}
+                {unscheduledOpen.map(task => (
+                  <SidebarTask key={task.id} task={task} projects={projects} onClick={openEditTask} />
+                ))}
+              </div>
+            </div>
+
+            {/* Project legend */}
+            <div style={{ padding: '10px 12px 12px', borderTop: '1px solid var(--border)' }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-light)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Projects</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {projects.map(p => (
+                  <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
+
+          {/* ── Calendar area ── */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+            {/* Day headers */}
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg)', flexShrink: 0 }}>
+              <div style={{ width: 52, flexShrink: 0 }} />
+              {weekDates.map((date, i) => {
+                const isToday = fmtDate(date) === fmtDate(new Date());
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      flex: 1,
+                      textAlign: 'center',
+                      padding: '8px 0',
+                      borderLeft: '1px solid var(--border)',
+                      background: isToday ? 'var(--bg-today)' : 'transparent',
+                    }}
+                  >
+                    <div style={{ fontSize: 11, fontWeight: 500, color: isToday ? 'var(--blue)' : 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      {DAYS[i]}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: isToday ? 600 : 400, color: isToday ? 'var(--blue)' : 'var(--text)' }}>
+                      {date.getDate()}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Grid */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              <div style={{ display: 'flex', minHeight: totalSlots * SLOT_HEIGHT }}>
+
+                {/* Time labels */}
+                <div style={{ width: 52, flexShrink: 0, position: 'relative' }}>
+                  {Array.from({ length: HOUR_END - HOUR_START }, (_, i) => {
+                    const hour = HOUR_START + i;
+                    const label = hour < 12 ? `${hour}am` : hour === 12 ? '12pm' : `${hour - 12}pm`;
+                    return (
+                      <div
+                        key={i}
+                        style={{
+                          position: 'absolute',
+                          top: i * 2 * SLOT_HEIGHT - 7,
+                          right: 6,
+                          fontSize: 11,
+                          color: 'var(--text-light)',
+                          textAlign: 'right',
+                          userSelect: 'none',
+                        }}
+                      >
+                        {label}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Day columns */}
+                {weekDates.map((date, i) => {
+                  const isToday = fmtDate(date) === fmtDate(new Date());
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        flex: 1,
+                        borderLeft: '1px solid var(--border)',
+                        position: 'relative',
+                        background: isToday ? 'var(--bg-today)' : 'transparent',
+                      }}
+                    >
+                      <CalendarColumn
+                        date={date}
+                        tasks={tasksForDay(date)}
+                        projects={projects}
+                        onTaskClick={openEditTask}
+                        onDropSlot={(newDate) => { if (draggedTask) handleDropSlot(draggedTask, newDate); }}
+                        onDragTaskStart={(task) => setDraggedTask(task)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal */}
+      {modal && (
+        <Modal
+          task={modal.task}
+          projects={projects}
+          onClose={() => setModal(null)}
+          onSave={handleSave}
+          onStart={handleStart}
+          onDone={handleDone}
+          onDelete={handleDelete}
+        />
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
